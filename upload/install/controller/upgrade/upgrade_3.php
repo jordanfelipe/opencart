@@ -6,14 +6,15 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 
 		$json = [];
 
+		// Adds any missing setting keys or default values that need changing or removed
 		try {
-			// Settings extensions and module changes
-
-			// Remove the `group` field
+			// Alter setting table
 			$query = $this->db->query("SELECT * FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = '" . DB_DATABASE . "' AND TABLE_NAME = '" . DB_PREFIX . "setting' AND COLUMN_NAME = 'group'");
 
 			if ($query->num_rows) {
 				$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `code` = `group` WHERE `code` IS NULL or `code` = ''");
+
+				// Remove the `group` field
 				$this->db->query("ALTER TABLE `" . DB_PREFIX . "setting` DROP `group`");
 			}
 
@@ -26,7 +27,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				}
 			}
 
-			// Get the default settings
+			// Add missing default settings
 			$settings = [];
 
 			$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "setting` WHERE `store_id` = '0'");
@@ -49,6 +50,16 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				'serialized' => 0
 			];
 
+			// Add config_theme if missing and still using config_template
+			if (isset($settings['config_template'])) {
+				$missing[] = [
+					'key'        => 'config_theme',
+					'value'      => 'basic',
+					'code'       => 'config',
+					'serialized' => 0
+				];
+			}
+
 			$missing[] = [
 				'key'        => 'config_product_description_length',
 				'value'      => 100,
@@ -63,12 +74,14 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				'serialized' => 0
 			];
 
-			$missing[] = [
-				'key'        => 'config_pagination_admin',
-				'value'      => $settings['config_limit_admin'],
-				'code'       => 'config',
-				'serialized' => 0
-			];
+			if (isset($settings['config_limit_admin'])) {
+				$missing[] = [
+					'key' => 'config_pagination_admin',
+					'value' => $settings['config_limit_admin'],
+					'code' => 'config',
+					'serialized' => 0
+				];
+			}
 
 			$missing[] = [
 				'key'        => 'config_encryption',
@@ -105,7 +118,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				'serialized' => 0
 			];
 
-			if ($settings['config_smtp_host']) {
+			if (isset($settings['config_smtp_host'])) {
 				$missing[] = [
 					'key' => 'config_mail_smtp_hostname',
 					'value' => $settings['config_smtp_host'],
@@ -114,7 +127,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				];
 			}
 
-			if ($settings['config_smtp_username']) {
+			if (isset($settings['config_smtp_username'])) {
 				$missing[] = [
 					'key' => 'config_mail_smtp_username',
 					'value' => $settings['config_smtp_username'],
@@ -123,7 +136,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				];
 			}
 
-			if ($settings['config_smtp_password']) {
+			if (isset($settings['config_smtp_password'])) {
 				$missing[] = [
 					'key' => 'config_mail_smtp_password',
 					'value' => $settings['config_smtp_password'],
@@ -132,7 +145,8 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				];
 			}
 
-			if ($settings['config_smtp_port']) {
+
+			if (isset($settings['config_smtp_port'])) {
 				$missing[] = [
 					'key' => 'config_mail_smtp_port',
 					'value' => $settings['config_smtp_port'],
@@ -141,7 +155,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				];
 			}
 
-			if ($settings['config_smtp_timeout']) {
+			if (isset($settings['config_smtp_timeout'])) {
 				$missing[] = [
 					'key'        => 'config_mail_smtp_timeout',
 					'value'      => $settings['config_smtp_timeout'],
@@ -150,7 +164,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				];
 			}
 
-			if ($settings['config_smtp_timeout']) {
+			if (isset($settings['config_smtp_timeout'])) {
 				$missing[] = [
 					'key'        => 'config_mail_smtp_timeout',
 					'value'      => $settings['config_smtp_timeout'],
@@ -178,36 +192,14 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 			foreach ($missing as $setting) {
 				$query = $this->db->query("SELECT setting_id FROM `" . DB_PREFIX . "setting` WHERE `store_id` = '0' AND `key` = '" . $this->db->escape($setting['key']) . "'");
 
-				if (!$query->num_rows) {
-					if (!isset($settings[$setting['key']])) {
-						if (!$setting['serialized']) {
-							$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `key` = '" . $this->db->escape($setting['key']) . "', `value` = '" . $this->db->escape($setting['value']) . "', `code` = '" . $this->db->escape($setting['code']) . "', `serialized` = '0', `store_id` = '0'");
-						} else {
-							$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `key` = '" . $this->db->escape($setting['key']) . "', `value` = '" . $this->db->escape(json_encode($setting['value'])) . "', `code` = '" . $this->db->escape($setting['code']) . "', `serialized` = '1', `store_id` = '0'");
-						}
+				if (!$query->num_rows && !isset($settings[$setting['key']])) {
+					if (!$setting['serialized']) {
+						$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `key` = '" . $this->db->escape($setting['key']) . "', `value` = '" . $this->db->escape($setting['value']) . "', `code` = '" . $this->db->escape($setting['code']) . "', `serialized` = '0', `store_id` = '0'");
+					} else {
+						$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `key` = '" . $this->db->escape($setting['key']) . "', `value` = '" . $this->db->escape(json_encode($setting['value'])) . "', `code` = '" . $this->db->escape($setting['code']) . "', `serialized` = '1', `store_id` = '0'");
 					}
 				}
 			}
-
-			$remove = [
-				''
-
-			];
-
-			// force some settings to prevent errors
-			if ($settings['config_template'] == 'basic_default') {
-				$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = 'default' WHERE `key` = 'config_template'");
-			}
-
-
-			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = '1' WHERE `key` = 'config_error_display'");
-			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = '1' WHERE `key` = 'config_error_log'");
-			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = '0' WHERE `key` = 'config_compression'");
-
-			// Update some language settings
-			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = 'en-gb' WHERE `key` = 'config_language' AND `value` = 'en'");
-			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = 'en-gb' WHERE `key` = 'config_language_admin' AND `value` = 'en'");
-			$this->db->query("UPDATE `" . DB_PREFIX . "language` SET `code` = 'en-gb' WHERE `code` = 'en'");
 
 			$this->cache->delete('language');
 
@@ -215,7 +207,6 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 			$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "extension`");
 
 			foreach ($query->rows as $extension) {
-
 				//get all setting from setting table
 				$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "setting` WHERE `code` = '" . $extension['code'] . "'");
 
@@ -229,46 +220,23 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 				}
 			}
 
-			// Extension
-			$query = $this->db->query("SELECT * FROM `" . DB_PREFIX . "extension` WHERE `type` = 'dashboard'");
+			// Update some language settings
+			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = 'en-gb' WHERE `key` = 'config_language' AND `value` = 'en'");
+			$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `value` = 'en-gb' WHERE `key` = 'config_language_admin' AND `value` = 'en'");
 
-			if (!$query->num_rows) {
-				$this->db->query("UPDATE `" . DB_PREFIX . "setting` SET `key` = 'payment_free_checkout_order_status_id' WHERE `key` = 'free_checkout_order_status_id'");
+			// Remove some setting keys
+			$remove = [
+				'config_template',
+				'config_limit_admin',
+				'config_smtp_host',
+				'config_smtp_username',
+				'config_smtp_password',
+				'config_smtp_port',
+				'config_smtp_timeout'
+			];
 
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'activity'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'sale'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'recent'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'order'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'online'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'map'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'customer'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "extension` SET `extension` = 'opencart', `type` = 'dashboard', `code` = 'chart'");
-
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_activity', `key` = 'dashboard_activity_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_activity', `key` = 'dashboard_activity_sort_order', `value` = '7', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_sale', `key` = 'dashboard_sale_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_sale', `key` = 'dashboard_sale_width', `value` = '3', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_chart', `key` = 'dashboard_chart_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_chart', `key` = 'dashboard_chart_width', `value` = '6', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_customer', `key` = 'dashboard_customer_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_customer', `key` = 'dashboard_customer_width', `value` = '3', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_map', `key` = 'dashboard_map_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_map', `key` = 'dashboard_map_width', `value` = '6', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_online', `key` = 'dashboard_online_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_online', `key` = 'dashboard_online_width', `value` = '3', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_order', `key` = 'dashboard_order_sort_order', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_order', `key` = 'dashboard_order_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_order', `key` = 'dashboard_order_width', `value` = '3', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_sale', `key` = 'dashboard_sale_sort_order', `value` = '2', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_customer', `key` = 'dashboard_customer_sort_order', `value` = '3', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_online', `key` = 'dashboard_online_sort_order', `value` = '4', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_map', `key` = 'dashboard_map_sort_order', `value` = '5', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_chart', `key` = 'dashboard_chart_sort_order', `value` = '6', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_recent', `key` = 'dashboard_recent_status', `value` = '1', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_recent', `key` = 'dashboard_recent_sort_order', `value` = '8', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_activity', `key` = 'dashboard_activity_width', `value` = '4', `serialized` = '0'");
-				$this->db->query("INSERT INTO `" . DB_PREFIX . "setting` SET `store_id` = '0', `code` = 'dashboard_recent', `key` = 'dashboard_recent_width', `value` = '8', `serialized` = '0'");
-
+			foreach ($remove as $key) {
+				$this->db->query("DELETE FROM `" . DB_PREFIX . "setting` WHERE `key` = '" . $this->db->escape($key) . "'");
 			}
 		} catch(\ErrorException $exception) {
 			$json['error'] = sprintf($this->language->get('error_exception'), $exception->getCode(), $exception->getMessage(), $exception->getFile(), $exception->getLine());
@@ -277,7 +245,7 @@ class Upgrade3 extends \Opencart\System\Engine\Controller {
 		if (!$json) {
 			$json['success'] = sprintf($this->language->get('text_progress'), 3, 3, 8);
 
-			$json['next'] = $this->url->link('upgrade/upgrade_4', true);
+			$json['next'] = $this->url->link('upgrade/upgrade_4', '', true);
 		}
 
 		$this->response->addHeader('Content-Type: application/json');
